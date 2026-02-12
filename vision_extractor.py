@@ -68,14 +68,59 @@ def _page_to_image_bytes(page, resolution: int = 300) -> bytes:
     return buf.getvalue()
 
 
-def extract_with_vision(pdf_path: str) -> list[dict]:
+def _build_prompt(known_names: list[str] | None = None) -> str:
+    """Build the extraction prompt, optionally including known employee names."""
+    prompt = EXTRACTION_PROMPT
+    if known_names:
+        names_list = ", ".join(known_names)
+        prompt += (
+            "\n\nIMPORTANT — Known employees in this company:\n"
+            f"{names_list}\n"
+            "If the name you read on the payslip closely matches one of these "
+            "known names, prefer the known spelling. Only use a different name "
+            "if you are confident the payslip shows a genuinely different person."
+        )
+    return prompt
+
+
+def apply_corrections(
+    extracted: list[dict],
+    corrections: dict[str, dict[str, str]] | None = None,
+) -> list[dict]:
+    """Apply known corrections to extracted data in-place.
+
+    *corrections* is expected as ``{field: {extracted_val: corrected_val}}``.
+    """
+    if not corrections:
+        return extracted
+    for entry in extracted:
+        for field, mapping in corrections.items():
+            val = entry.get(field)
+            if val and val in mapping:
+                logger.info(
+                    "Auto-correcting %s: %r -> %r", field, val, mapping[val]
+                )
+                entry[field] = mapping[val]
+    return extracted
+
+
+def extract_with_vision(
+    pdf_path: str,
+    known_names: list[str] | None = None,
+    corrections: dict[str, dict[str, str]] | None = None,
+) -> list[dict]:
     """
     Extract employee data from each page of a PDF using Claude Vision API.
+
+    *known_names*: list of employee names from the DB to include in the prompt
+    for better accuracy.
+    *corrections*: ``{field: {extracted: corrected}}`` dict of known mistakes.
 
     Returns a list of dicts, one per page, with keys:
     name, employee_id, email, month, year, page_number, raw_text
     """
     client = anthropic.Anthropic(api_key=Config.ANTHROPIC_API_KEY)
+    prompt = _build_prompt(known_names)
     results = []
 
     with pdfplumber.open(pdf_path) as pdf:
@@ -104,7 +149,7 @@ def extract_with_vision(pdf_path: str) -> list[dict]:
                                 },
                                 {
                                     "type": "text",
-                                    "text": EXTRACTION_PROMPT,
+                                    "text": prompt,
                                 },
                             ],
                         }
@@ -146,6 +191,9 @@ def extract_with_vision(pdf_path: str) -> list[dict]:
                         "raw_text": raw_text,
                     }
                 )
+
+    # Apply known corrections to the raw extraction results
+    apply_corrections(results, corrections)
 
     return results
 

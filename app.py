@@ -34,7 +34,7 @@ from config import Config
 from payslip_parser import HEBREW_MONTHS, EmployeePayslip, parse_payslips
 from pdf_processor import split_and_encrypt
 from email_sender import send_all_payslips
-from vision_extractor import extract_with_vision, generate_all_previews, get_cached_preview
+from vision_extractor import apply_corrections, extract_with_vision, generate_all_previews, get_cached_preview
 import database as db
 
 logging.basicConfig(level=logging.INFO)
@@ -92,7 +92,21 @@ def upload():
     try:
         if _use_vision():
             logger.info("Using Claude Vision API for extraction")
-            extracted = extract_with_vision(pdf_path)
+            # Feed known employees and past corrections into the extractor
+            known_names = db.get_known_employee_names()
+            name_corrections = db.get_corrections("name")
+            id_corrections = db.get_corrections("employee_id")
+            corrections_map = {}
+            if name_corrections:
+                corrections_map["name"] = name_corrections
+            if id_corrections:
+                corrections_map["employee_id"] = id_corrections
+
+            extracted = extract_with_vision(
+                pdf_path,
+                known_names=known_names or None,
+                corrections=corrections_map or None,
+            )
             payslips = []
             for data in extracted:
                 # Try to fill in email from DB if we have the employee_id
@@ -140,6 +154,15 @@ def upload():
     except Exception as e:
         logger.warning(f"Preview generation failed: {e}")
 
+    # Snapshot the extracted values so we can detect user corrections later
+    original_extractions = []
+    for ps in payslips:
+        original_extractions.append({
+            "name": ps.name or "",
+            "employee_id": ps.employee_id or "",
+            "email": ps.email or "",
+        })
+
     # Store session data
     _sessions[session_id] = {
         "pdf_path": pdf_path,
@@ -147,6 +170,7 @@ def upload():
         "session_dir": session_dir,
         "preview_dir": preview_dir,
         "payslips": payslips,
+        "original_extractions": original_extractions,
     }
 
     return redirect(url_for("preview", session_id=session_id))
@@ -234,6 +258,22 @@ def process():
         year_val = request.form.get(f"year_{i}", "")
         if year_val and year_val.isdigit():
             ps.year = int(year_val)
+
+    # Learn from user corrections: compare submitted values to original extractions
+    original_extractions = sess.get("original_extractions", [])
+    for i, ps in enumerate(payslips):
+        if i < len(original_extractions):
+            orig = original_extractions[i]
+            submitted_name = (ps.name or "").strip()
+            submitted_id = (ps.employee_id or "").strip()
+            orig_name = (orig.get("name") or "").strip()
+            orig_id = (orig.get("employee_id") or "").strip()
+            if orig_name and submitted_name and orig_name != submitted_name:
+                db.record_correction("name", orig_name, submitted_name)
+                logger.info("Learned correction: name %r -> %r", orig_name, submitted_name)
+            if orig_id and submitted_id and orig_id != submitted_id:
+                db.record_correction("employee_id", orig_id, submitted_id)
+                logger.info("Learned correction: employee_id %r -> %r", orig_id, submitted_id)
 
     # Validate: every payslip must have at least name and ID
     errors = []

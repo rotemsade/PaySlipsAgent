@@ -67,6 +67,17 @@ def init_db():
         CREATE INDEX IF NOT EXISTS idx_records_batch ON payslip_records(batch_id);
         CREATE INDEX IF NOT EXISTS idx_records_employee ON payslip_records(employee_id);
         CREATE INDEX IF NOT EXISTS idx_records_period ON payslip_records(year, month);
+
+        CREATE TABLE IF NOT EXISTS corrections (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            field TEXT NOT NULL,              -- 'name', 'employee_id'
+            extracted_value TEXT NOT NULL,    -- what the AI originally extracted
+            corrected_value TEXT NOT NULL,    -- what the user corrected it to
+            occurrences INTEGER NOT NULL DEFAULT 1,
+            created_at TEXT NOT NULL DEFAULT (datetime('now')),
+            updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+            UNIQUE(field, extracted_value)
+        );
         """
     )
     conn.commit()
@@ -156,6 +167,68 @@ def get_all_employees() -> list[dict]:
     rows = conn.execute("SELECT * FROM employees ORDER BY name").fetchall()
     conn.close()
     return [dict(r) for r in rows]
+
+
+# ---------- Correction / learning operations ----------
+
+
+def record_correction(field: str, extracted: str, corrected: str):
+    """Record an AI extraction mistake so we can auto-fix it next time.
+
+    If the same (field, extracted_value) already exists, update the corrected
+    value and bump the occurrence counter.
+    """
+    if not extracted or not corrected or extracted == corrected:
+        return
+    conn = get_db()
+    conn.execute(
+        """INSERT INTO corrections (field, extracted_value, corrected_value)
+        VALUES (?, ?, ?)
+        ON CONFLICT(field, extracted_value) DO UPDATE SET
+            corrected_value = excluded.corrected_value,
+            occurrences = occurrences + 1,
+            updated_at = datetime('now')""",
+        (field, extracted.strip(), corrected.strip()),
+    )
+    conn.commit()
+    conn.close()
+
+
+def get_corrections(field: str | None = None) -> dict[str, str]:
+    """Return a mapping of extracted_value -> corrected_value.
+
+    If *field* is given, only return corrections for that field.
+    """
+    conn = get_db()
+    if field:
+        rows = conn.execute(
+            "SELECT extracted_value, corrected_value FROM corrections WHERE field = ?",
+            (field,),
+        ).fetchall()
+    else:
+        rows = conn.execute(
+            "SELECT extracted_value, corrected_value FROM corrections"
+        ).fetchall()
+    conn.close()
+    return {row["extracted_value"]: row["corrected_value"] for row in rows}
+
+
+def get_all_corrections() -> list[dict]:
+    """Return all corrections as a list of dicts (for display / debugging)."""
+    conn = get_db()
+    rows = conn.execute(
+        "SELECT * FROM corrections ORDER BY occurrences DESC, updated_at DESC"
+    ).fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
+
+
+def get_known_employee_names() -> list[str]:
+    """Return a list of all known employee names from the employees table."""
+    conn = get_db()
+    rows = conn.execute("SELECT name FROM employees ORDER BY name").fetchall()
+    conn.close()
+    return [row["name"] for row in rows if row["name"]]
 
 
 # ---------- Batch operations ----------
