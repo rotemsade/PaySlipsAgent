@@ -5,11 +5,11 @@
 <div class="card">
     <h2 style="margin-bottom: 1rem;">מאגר עובדים</h2>
     <p style="color: #6b7280; margin-bottom: 1.5rem; font-size: 0.9rem;">
-        נתוני העובדים נשמרים אוטומטית בכל עיבוד. כתובות אימייל מתמלאות אוטומטית בתלושים הבאים.
+        נתוני העובדים נשמרים אוטומטית בכל עיבוד. לחצו על שורה כדי לערוך שם, ת.ז או אימייל.
     </p>
 
     {% if employees %}
-    <table>
+    <table id="emp-table">
         <thead>
             <tr>
                 <th>שם</th>
@@ -17,16 +17,33 @@
                 <th>אימייל</th>
                 <th>נוצר</th>
                 <th>עודכן</th>
+                <th style="width: 120px;">פעולות</th>
             </tr>
         </thead>
         <tbody>
             {% for emp in employees %}
-            <tr>
-                <td>{{ emp.name }}</td>
-                <td style="font-family: monospace;">{{ emp.employee_id }}</td>
-                <td>{{ emp.email or '---' }}</td>
+            <tr data-id="{{ emp.id }}">
+                <td class="editable" data-field="name">
+                    <span class="display-val">{{ emp.name }}</span>
+                    <input type="text" class="edit-input" value="{{ emp.name }}" style="display:none;" />
+                </td>
+                <td class="editable" data-field="employee_id" style="font-family: monospace;">
+                    <span class="display-val">{{ emp.employee_id }}</span>
+                    <input type="text" class="edit-input" value="{{ emp.employee_id }}" style="display:none;" />
+                </td>
+                <td class="editable" data-field="email">
+                    <span class="display-val">{{ emp.email or '---' }}</span>
+                    <input type="email" class="edit-input" value="{{ emp.email or '' }}" style="display:none;" />
+                </td>
                 <td style="font-size: 0.85rem; color: #6b7280;">{{ emp.created_at }}</td>
-                <td style="font-size: 0.85rem; color: #6b7280;">{{ emp.updated_at }}</td>
+                <td style="font-size: 0.85rem; color: #6b7280;" class="updated-at">{{ emp.updated_at }}</td>
+                <td>
+                    <button class="btn-edit" title="ערוך" onclick="startEdit(this)">✏️ ערוך</button>
+                    <div class="edit-actions" style="display:none;">
+                        <button class="btn-save" title="שמור" onclick="saveRow(this)">💾</button>
+                        <button class="btn-cancel" title="בטל" onclick="cancelEdit(this)">✖</button>
+                    </div>
+                </td>
             </tr>
             {% endfor %}
         </tbody>
@@ -35,4 +52,153 @@
     <p style="color: #6b7280; text-align: center; padding: 2rem;">אין עובדים רשומים עדיין.</p>
     {% endif %}
 </div>
+
+<style>
+    #emp-table .edit-input {
+        width: 100%;
+        padding: 4px 8px;
+        border: 1px solid #3b82f6;
+        border-radius: 4px;
+        font-size: 0.95rem;
+        font-family: inherit;
+        box-sizing: border-box;
+    }
+    #emp-table td[data-field="employee_id"] .edit-input {
+        font-family: monospace;
+    }
+    #emp-table .editable {
+        cursor: default;
+    }
+    #emp-table tr.editing .editable {
+        cursor: text;
+    }
+    .btn-edit, .btn-save, .btn-cancel {
+        border: none;
+        background: none;
+        cursor: pointer;
+        font-size: 0.95rem;
+        padding: 4px 8px;
+        border-radius: 4px;
+    }
+    .btn-edit:hover { background: #e5e7eb; }
+    .btn-save { color: #16a34a; }
+    .btn-save:hover { background: #dcfce7; }
+    .btn-cancel { color: #dc2626; }
+    .btn-cancel:hover { background: #fee2e2; }
+    .edit-actions {
+        display: flex;
+        gap: 2px;
+    }
+    #emp-table tr.editing {
+        background: #eff6ff;
+    }
+    .save-ok {
+        animation: flashGreen 1s ease;
+    }
+    @keyframes flashGreen {
+        0% { background: #bbf7d0; }
+        100% { background: transparent; }
+    }
+    .save-err {
+        animation: flashRed 1s ease;
+    }
+    @keyframes flashRed {
+        0% { background: #fecaca; }
+        100% { background: transparent; }
+    }
+</style>
+
+<script>
+function startEdit(btn) {
+    const row = btn.closest('tr');
+    row.classList.add('editing');
+    row.querySelectorAll('.display-val').forEach(s => s.style.display = 'none');
+    row.querySelectorAll('.edit-input').forEach(inp => inp.style.display = '');
+    btn.style.display = 'none';
+    row.querySelector('.edit-actions').style.display = 'flex';
+    // Focus first input
+    const first = row.querySelector('.edit-input');
+    if (first) first.focus();
+}
+
+function cancelEdit(btn) {
+    const row = btn.closest('tr');
+    row.classList.remove('editing');
+    // Restore original values
+    row.querySelectorAll('.editable').forEach(td => {
+        const span = td.querySelector('.display-val');
+        const inp = td.querySelector('.edit-input');
+        inp.value = span.textContent === '---' ? '' : span.textContent;
+        span.style.display = '';
+        inp.style.display = 'none';
+    });
+    row.querySelector('.btn-edit').style.display = '';
+    row.querySelector('.edit-actions').style.display = 'none';
+}
+
+async function saveRow(btn) {
+    const row = btn.closest('tr');
+    const dbId = row.dataset.id;
+
+    const name = row.querySelector('[data-field="name"] .edit-input').value.trim();
+    const employeeId = row.querySelector('[data-field="employee_id"] .edit-input').value.trim();
+    const email = row.querySelector('[data-field="email"] .edit-input').value.trim();
+
+    if (!name || !employeeId) {
+        alert('שם ות.ז הם שדות חובה');
+        return;
+    }
+
+    try {
+        const resp = await fetch(`/employees/update/${dbId}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ name, employee_id: employeeId, email })
+        });
+        const data = await resp.json();
+
+        if (data.success) {
+            // Update display values
+            row.querySelector('[data-field="name"] .display-val').textContent = name;
+            row.querySelector('[data-field="employee_id"] .display-val').textContent = employeeId;
+            row.querySelector('[data-field="email"] .display-val').textContent = email || '---';
+            // Update the "updated_at" column
+            const now = new Date().toISOString().replace('T', ' ').substring(0, 19);
+            row.querySelector('.updated-at').textContent = now;
+
+            // Exit edit mode
+            row.classList.remove('editing');
+            row.querySelectorAll('.display-val').forEach(s => s.style.display = '');
+            row.querySelectorAll('.edit-input').forEach(inp => inp.style.display = 'none');
+            row.querySelector('.btn-edit').style.display = '';
+            row.querySelector('.edit-actions').style.display = 'none';
+
+            // Flash green
+            row.classList.add('save-ok');
+            setTimeout(() => row.classList.remove('save-ok'), 1000);
+        } else {
+            alert(data.error || 'שגיאה בשמירה');
+            row.classList.add('save-err');
+            setTimeout(() => row.classList.remove('save-err'), 1000);
+        }
+    } catch (e) {
+        alert('שגיאת רשת: ' + e.message);
+        row.classList.add('save-err');
+        setTimeout(() => row.classList.remove('save-err'), 1000);
+    }
+}
+
+// Allow pressing Enter to save, Escape to cancel
+document.addEventListener('keydown', function(e) {
+    const row = e.target.closest('tr.editing');
+    if (!row) return;
+    if (e.key === 'Enter') {
+        e.preventDefault();
+        row.querySelector('.btn-save').click();
+    } else if (e.key === 'Escape') {
+        e.preventDefault();
+        row.querySelector('.btn-cancel').click();
+    }
+});
+</script>
 {% endblock %}

@@ -136,6 +136,21 @@ def get_employee_by_email(email: str) -> dict | None:
     return dict(row) if row else None
 
 
+def update_employee(db_id: int, name: str, employee_id: str, email: str | None) -> bool:
+    """Update an employee record by its database row id. Returns True if updated."""
+    conn = get_db()
+    conn.execute(
+        """UPDATE employees
+        SET name = ?, employee_id = ?, email = ?, updated_at = datetime('now')
+        WHERE id = ?""",
+        (name, employee_id, email or None, db_id),
+    )
+    conn.commit()
+    changed = conn.total_changes > 0
+    conn.close()
+    return changed
+
+
 def get_all_employees() -> list[dict]:
     conn = get_db()
     rows = conn.execute("SELECT * FROM employees ORDER BY name").fetchall()

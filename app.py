@@ -316,6 +316,25 @@ def employees():
     return render_template("employees.html", employees=emps)
 
 
+@app.route("/employees/update/<int:employee_db_id>", methods=["POST"])
+def update_employee(employee_db_id: int):
+    """Update an employee record (name, employee_id, email)."""
+    data = request.get_json(silent=True) or {}
+    name = (data.get("name") or "").strip()
+    employee_id = (data.get("employee_id") or "").strip()
+    email = (data.get("email") or "").strip() or None
+
+    if not name or not employee_id:
+        return jsonify({"success": False, "error": "שם ות.ז הם שדות חובה"}), 400
+
+    try:
+        db.update_employee(employee_db_id, name, employee_id, email)
+        return jsonify({"success": True})
+    except Exception as e:
+        logger.error(f"Failed to update employee {employee_db_id}: {e}")
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
 @app.route("/retry/<int:record_id>", methods=["POST"])
 def retry_email(record_id: int):
     """Retry sending a failed email for a specific record."""
