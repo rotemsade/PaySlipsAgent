@@ -38,9 +38,9 @@
                 <td style="font-size: 0.85rem;">{{ r.filename }}</td>
                 <td>
                     {% if r.success %}
-                    <span class="status-ok">נשלח</span>
+                    <span class="badge badge-green">נשלח</span>
                     {% else %}
-                    <span class="status-err">נכשל</span>
+                    <span class="badge badge-red">נכשל</span>
                     {% endif %}
                 </td>
                 <td style="font-size: 0.85rem; color: #6b7280;">
@@ -51,8 +51,11 @@
         </tbody>
     </table>
 
-    <div style="text-align: center; margin-top: 2rem;">
+    <div style="display: flex; gap: 1rem; justify-content: center; margin-top: 2rem;">
         <a href="{{ url_for('index') }}" class="btn btn-primary">שלח תלושים נוספים</a>
+        {% if results|rejectattr('success')|list|length > 0 %}
+        <a href="{{ url_for('history') }}" class="btn btn-warning">צפה בהיסטוריה ושלח שוב</a>
+        {% endif %}
     </div>
 </div>
 {% endblock %}

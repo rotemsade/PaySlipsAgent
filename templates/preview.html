@@ -3,49 +3,101 @@
 
 {% block extra_head %}
 <style>
-    .payslip-row { transition: background 0.2s; }
-    .payslip-row:hover { background: #f9fafb; }
-    .payslip-row.invalid { background: #fef2f2; }
-    .page-badge {
-        display: inline-block;
-        background: #e5e7eb;
-        padding: 0.2rem 0.6rem;
-        border-radius: 9999px;
+    .payslip-card {
+        display: flex;
+        gap: 1.5rem;
+        padding: 1.25rem;
+        border: 1px solid #e5e7eb;
+        border-radius: 10px;
+        margin-bottom: 1rem;
+        transition: all 0.2s;
+        align-items: flex-start;
+    }
+    .payslip-card:hover { border-color: #93c5fd; box-shadow: 0 2px 8px rgba(0,0,0,0.05); }
+    .payslip-card.invalid { border-color: #fca5a5; background: #fef2f2; }
+    .payslip-card.already-sent { border-color: #fcd34d; background: #fffbeb; }
+    .preview-thumb {
+        flex-shrink: 0;
+        width: 140px;
+        border: 1px solid #e5e7eb;
+        border-radius: 6px;
+        overflow: hidden;
+        cursor: pointer;
+        transition: transform 0.2s;
+    }
+    .preview-thumb:hover { transform: scale(1.03); }
+    .preview-thumb img { width: 100%; display: block; }
+    .payslip-fields {
+        flex: 1;
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 0.75rem;
+    }
+    .field-group { display: flex; flex-direction: column; gap: 0.2rem; }
+    .field-group label {
         font-size: 0.8rem;
         font-weight: 600;
-    }
-    .preview-filename {
-        font-size: 0.8rem;
         color: #6b7280;
-        margin-top: 0.25rem;
     }
-    .form-actions {
+    .field-group.full-width { grid-column: 1 / -1; }
+    .page-header {
         display: flex;
-        gap: 1rem;
-        justify-content: center;
-        margin-top: 1.5rem;
+        align-items: center;
+        gap: 0.75rem;
+        margin-bottom: 0.5rem;
+        grid-column: 1 / -1;
+    }
+    .page-badge {
+        background: #e5e7eb;
+        padding: 0.2rem 0.7rem;
+        border-radius: 9999px;
+        font-size: 0.8rem;
+        font-weight: 700;
+    }
+    .extraction-badge {
+        font-size: 0.75rem;
+        padding: 0.5rem 1rem;
+        border-radius: 8px;
+        background: #dbeafe;
+        color: #1e40af;
     }
     .summary {
         display: flex;
         gap: 2rem;
         margin-bottom: 1.5rem;
         flex-wrap: wrap;
+        align-items: center;
     }
-    .summary-item {
-        text-align: center;
-    }
-    .summary-item .num {
-        font-size: 2rem;
-        font-weight: 700;
-        color: #0f3460;
-    }
-    .summary-item .label {
-        font-size: 0.85rem;
-        color: #6b7280;
+    .summary-item { text-align: center; }
+    .summary-item .num { font-size: 2rem; font-weight: 700; color: #0f3460; }
+    .summary-item .label { font-size: 0.85rem; color: #6b7280; }
+    .form-actions {
+        display: flex;
+        gap: 1rem;
+        justify-content: center;
+        margin-top: 1.5rem;
     }
     .input-sm {
-        padding: 0.35rem 0.5rem;
-        font-size: 0.85rem;
+        padding: 0.4rem 0.6rem !important;
+        font-size: 0.85rem !important;
+    }
+    /* Lightbox */
+    .lightbox {
+        display: none;
+        position: fixed;
+        inset: 0;
+        background: rgba(0,0,0,0.8);
+        z-index: 1000;
+        justify-content: center;
+        align-items: center;
+        cursor: pointer;
+    }
+    .lightbox.active { display: flex; }
+    .lightbox img {
+        max-width: 90vw;
+        max-height: 90vh;
+        border-radius: 8px;
+        box-shadow: 0 4px 30px rgba(0,0,0,0.3);
     }
 </style>
 {% endblock %}
@@ -65,64 +117,81 @@
             <div class="num status-err">{{ payslips|rejectattr('is_valid')|list|length }}</div>
             <div class="label">דורשים תיקון</div>
         </div>
+        <div class="extraction-badge">
+            חילוץ באמצעות: <strong>{{ extraction_method }}</strong>
+        </div>
     </div>
 </div>
 
-<div class="card" style="overflow-x: auto;">
+<div class="card">
     <h3 style="margin-bottom: 1rem;">בדוק ותקן את הנתונים לפני שליחה</h3>
 
     <form action="{{ url_for('process') }}" method="post" id="processForm">
         <input type="hidden" name="session_id" value="{{ session_id }}">
 
-        <table>
-            <thead>
-                <tr>
-                    <th>עמוד</th>
-                    <th>שם עובד/ת</th>
-                    <th>ת.ז</th>
-                    <th>אימייל</th>
-                    <th>חודש</th>
-                    <th>שנה</th>
-                    <th>שם קובץ</th>
-                </tr>
-            </thead>
-            <tbody>
-                {% for ps in payslips %}
-                <tr class="payslip-row {{ '' if ps.is_valid else 'invalid' }}">
-                    <td><span class="page-badge">{{ ps.page }}</span></td>
-                    <td>
-                        <input type="text" name="name_{{ loop.index0 }}" value="{{ ps.name }}"
-                               class="input-sm" placeholder="שם מלא" required>
-                    </td>
-                    <td>
-                        <input type="text" name="employee_id_{{ loop.index0 }}" value="{{ ps.employee_id }}"
-                               class="input-sm" placeholder="מספר ת.ז" required
-                               pattern="\d{5,9}" title="5-9 ספרות">
-                    </td>
-                    <td>
-                        <input type="email" name="email_{{ loop.index0 }}" value="{{ ps.email }}"
-                               class="input-sm" placeholder="email@example.com">
-                    </td>
-                    <td>
+        {% for ps in payslips %}
+        <div class="payslip-card {{ '' if ps.is_valid else 'invalid' }} {{ 'already-sent' if ps.already_sent }}">
+            <div class="preview-thumb" onclick="openLightbox('{{ url_for('page_preview', session_id=session_id, page_number=ps.page - 1) }}')">
+                <img src="{{ url_for('page_preview', session_id=session_id, page_number=ps.page - 1) }}"
+                     alt="תלוש עמוד {{ ps.page }}" loading="lazy">
+            </div>
+
+            <div class="payslip-fields">
+                <div class="page-header">
+                    <span class="page-badge">עמוד {{ ps.page }}</span>
+                    {% if ps.already_sent %}
+                    <span class="badge badge-yellow">כבר נשלח בעבר</span>
+                    {% endif %}
+                    {% if not ps.is_valid %}
+                    <span class="badge badge-red">דורש תיקון</span>
+                    {% endif %}
+                </div>
+
+                <div class="field-group">
+                    <label>שם עובד/ת</label>
+                    <input type="text" name="name_{{ loop.index0 }}" value="{{ ps.name }}"
+                           class="input-sm" placeholder="שם מלא" required>
+                </div>
+
+                <div class="field-group">
+                    <label>ת.ז</label>
+                    <input type="text" name="employee_id_{{ loop.index0 }}" value="{{ ps.employee_id }}"
+                           class="input-sm" placeholder="מספר ת.ז" required
+                           pattern="\d{5,9}" title="5-9 ספרות">
+                </div>
+
+                <div class="field-group">
+                    <label>אימייל</label>
+                    <input type="email" name="email_{{ loop.index0 }}" value="{{ ps.email }}"
+                           class="input-sm" placeholder="email@example.com">
+                </div>
+
+                <div class="field-group" style="display: flex; flex-direction: row; gap: 0.5rem; align-items: end;">
+                    <div style="flex: 1;">
+                        <label>חודש</label>
                         <select name="month_{{ loop.index0 }}" class="input-sm">
                             <option value="">--</option>
                             {% for num, name in hebrew_months.items() %}
                             <option value="{{ num }}" {{ 'selected' if ps.month == num }}>{{ name }}</option>
                             {% endfor %}
                         </select>
-                    </td>
-                    <td>
+                    </div>
+                    <div style="flex: 1;">
+                        <label>שנה</label>
                         <input type="number" name="year_{{ loop.index0 }}" value="{{ ps.year }}"
-                               class="input-sm" placeholder="שנה" min="1900" max="2100"
-                               style="width: 80px;">
-                    </td>
-                    <td>
-                        <div class="preview-filename" id="fn_{{ loop.index0 }}">{{ ps.filename }}.pdf</div>
-                    </td>
-                </tr>
-                {% endfor %}
-            </tbody>
-        </table>
+                               class="input-sm" placeholder="שנה" min="1900" max="2100">
+                    </div>
+                </div>
+
+                <div class="field-group full-width">
+                    <label>שם קובץ (אוטומטי)</label>
+                    <div style="font-size: 0.85rem; color: #6b7280; padding: 0.3rem 0;">
+                        {{ ps.filename }}.pdf
+                    </div>
+                </div>
+            </div>
+        </div>
+        {% endfor %}
 
         <div class="form-actions">
             <a href="{{ url_for('index') }}" class="btn btn-secondary">חזרה</a>
@@ -133,7 +202,26 @@
     </form>
 </div>
 
+<!-- Lightbox for full-size preview -->
+<div class="lightbox" id="lightbox" onclick="closeLightbox()">
+    <img id="lightboxImg" src="" alt="תצוגה מקדימה">
+</div>
+
 <script>
+    function openLightbox(src) {
+        const lb = document.getElementById('lightbox');
+        const img = document.getElementById('lightboxImg');
+        // Load full-resolution version (wider)
+        img.src = src.replace('max_width=400', '');
+        lb.classList.add('active');
+    }
+    function closeLightbox() {
+        document.getElementById('lightbox').classList.remove('active');
+    }
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') closeLightbox();
+    });
+
     document.getElementById('processForm').addEventListener('submit', function() {
         const btn = document.getElementById('processBtn');
         btn.disabled = true;

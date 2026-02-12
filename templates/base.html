@@ -13,27 +13,43 @@
             min-height: 100vh;
         }
         .container {
-            max-width: 960px;
+            max-width: 1100px;
             margin: 0 auto;
             padding: 2rem 1rem;
         }
         header {
             background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
             color: white;
-            padding: 1.5rem 0;
-            margin-bottom: 2rem;
+            padding: 1rem 0;
             box-shadow: 0 2px 10px rgba(0,0,0,0.1);
         }
+        .header-inner {
+            max-width: 1100px;
+            margin: 0 auto;
+            padding: 0 1rem;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            flex-wrap: wrap;
+            gap: 1rem;
+        }
         header h1 {
-            text-align: center;
-            font-size: 1.8rem;
+            font-size: 1.5rem;
             font-weight: 600;
         }
-        header p {
-            text-align: center;
-            opacity: 0.8;
-            margin-top: 0.3rem;
-            font-size: 0.95rem;
+        header h1 a { color: white; text-decoration: none; }
+        nav { display: flex; gap: 0.5rem; flex-wrap: wrap; }
+        nav a {
+            color: rgba(255,255,255,0.8);
+            text-decoration: none;
+            padding: 0.4rem 1rem;
+            border-radius: 6px;
+            font-size: 0.9rem;
+            transition: all 0.2s;
+        }
+        nav a:hover, nav a.active {
+            color: white;
+            background: rgba(255,255,255,0.15);
         }
         .card {
             background: white;
@@ -58,12 +74,17 @@
             color: #065f46;
             border: 1px solid #6ee7b7;
         }
+        .flash.info {
+            background: #dbeafe;
+            color: #1e40af;
+            border: 1px solid #93c5fd;
+        }
         .btn {
             display: inline-block;
-            padding: 0.75rem 2rem;
+            padding: 0.6rem 1.5rem;
             border: none;
             border-radius: 8px;
-            font-size: 1rem;
+            font-size: 0.9rem;
             font-weight: 600;
             cursor: pointer;
             transition: all 0.2s;
@@ -84,6 +105,9 @@
             color: #374151;
         }
         .btn-secondary:hover { background: #d1d5db; }
+        .btn-sm { padding: 0.35rem 0.8rem; font-size: 0.8rem; }
+        .btn-danger { background: #dc2626; color: white; }
+        .btn-warning { background: #d97706; color: white; }
         input[type="text"], input[type="email"], input[type="number"], select {
             width: 100%;
             padding: 0.5rem 0.75rem;
@@ -103,20 +127,31 @@
             border-collapse: collapse;
         }
         th, td {
-            padding: 0.75rem;
+            padding: 0.65rem 0.5rem;
             text-align: right;
             border-bottom: 1px solid #e5e7eb;
         }
         th {
             background: #f9fafb;
             font-weight: 600;
-            font-size: 0.85rem;
+            font-size: 0.8rem;
             color: #6b7280;
-            text-transform: uppercase;
         }
         .status-ok { color: #059669; font-weight: 600; }
         .status-err { color: #dc2626; font-weight: 600; }
         .status-warn { color: #d97706; font-weight: 600; }
+        .badge {
+            display: inline-block;
+            padding: 0.15rem 0.5rem;
+            border-radius: 9999px;
+            font-size: 0.75rem;
+            font-weight: 600;
+        }
+        .badge-green { background: #d1fae5; color: #065f46; }
+        .badge-red { background: #fee2e2; color: #991b1b; }
+        .badge-blue { background: #dbeafe; color: #1e40af; }
+        .badge-yellow { background: #fef3c7; color: #92400e; }
+        .badge-gray { background: #e5e7eb; color: #374151; }
         footer {
             text-align: center;
             padding: 2rem 0;
@@ -128,8 +163,14 @@
 </head>
 <body>
     <header>
-        <h1>PaySlip Agent</h1>
-        <p>מערכת הפצת תלושי שכר מוצפנים</p>
+        <div class="header-inner">
+            <h1><a href="/">PaySlip Agent</a></h1>
+            <nav>
+                <a href="{{ url_for('index') }}">העלאה</a>
+                <a href="{{ url_for('history') }}">היסטוריה</a>
+                <a href="{{ url_for('employees') }}">עובדים</a>
+            </nav>
+        </div>
     </header>
 
     <div class="container">

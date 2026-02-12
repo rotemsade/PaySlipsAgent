@@ -8,4 +8,5 @@ venv/
 uploads/
 output/
 *.pdf
+*.db
 .DS_Store

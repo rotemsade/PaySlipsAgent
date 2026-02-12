@@ -17,3 +17,7 @@ class Config:
     SMTP_PASSWORD = os.getenv("SMTP_PASSWORD", "")
     SENDER_EMAIL = os.getenv("SENDER_EMAIL", "")
     SENDER_NAME = os.getenv("SENDER_NAME", "HR Department")
+
+    # Anthropic Claude API (for Vision-based extraction)
+    ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY", "")
+    ANTHROPIC_MODEL = os.getenv("ANTHROPIC_MODEL", "claude-sonnet-4-5-20250929")

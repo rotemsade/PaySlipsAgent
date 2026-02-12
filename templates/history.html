@@ -1,0 +1,97 @@
+{% extends "base.html" %}
+{% block title %}PaySlip Agent - היסטוריה{% endblock %}
+
+{% block content %}
+<div class="card">
+    <h2 style="margin-bottom: 1rem;">היסטוריית עיבוד</h2>
+
+    {% if batches %}
+    <h4 style="margin-bottom: 0.75rem; color: #6b7280;">אצוות אחרונות</h4>
+    <table style="margin-bottom: 2rem;">
+        <thead>
+            <tr>
+                <th>#</th>
+                <th>קובץ מקור</th>
+                <th>עמודים</th>
+                <th>סטטוס</th>
+                <th>תאריך</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for b in batches %}
+            <tr>
+                <td>{{ b.id }}</td>
+                <td>{{ b.original_filename }}</td>
+                <td>{{ b.total_pages }}</td>
+                <td>
+                    {% if b.status == 'completed' %}
+                    <span class="badge badge-green">הושלם</span>
+                    {% elif b.status == 'failed' %}
+                    <span class="badge badge-red">נכשל</span>
+                    {% else %}
+                    <span class="badge badge-blue">בעיבוד</span>
+                    {% endif %}
+                </td>
+                <td style="font-size: 0.85rem;">{{ b.processed_at }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    {% endif %}
+
+    <h4 style="margin-bottom: 0.75rem; color: #6b7280;">תלושים בודדים</h4>
+    {% if records %}
+    <div style="overflow-x: auto;">
+    <table>
+        <thead>
+            <tr>
+                <th>שם עובד/ת</th>
+                <th>ת.ז</th>
+                <th>חודש</th>
+                <th>שנה</th>
+                <th>קובץ</th>
+                <th>אימייל</th>
+                <th>נשלח</th>
+                <th>שגיאה</th>
+                <th>פעולות</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for r in records %}
+            <tr>
+                <td>{{ r.employee_name or '---' }}</td>
+                <td style="font-family: monospace;">{{ r.employee_id or '---' }}</td>
+                <td>{{ r.month or '---' }}</td>
+                <td>{{ r.year or '---' }}</td>
+                <td style="font-size: 0.8rem; max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
+                    {{ r.output_filename or '---' }}
+                </td>
+                <td style="font-size: 0.85rem;">{{ r.employee_email or '---' }}</td>
+                <td>
+                    {% if r.email_sent %}
+                    <span class="badge badge-green">נשלח</span>
+                    {% else %}
+                    <span class="badge badge-red">לא נשלח</span>
+                    {% endif %}
+                </td>
+                <td style="font-size: 0.8rem; color: #dc2626; max-width: 150px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;"
+                    title="{{ r.email_error or '' }}">
+                    {{ r.email_error or '' }}
+                </td>
+                <td>
+                    {% if not r.email_sent %}
+                    <form action="{{ url_for('retry_email', record_id=r.id) }}" method="post" style="display: inline;">
+                        <button type="submit" class="btn btn-sm btn-warning">שלח שוב</button>
+                    </form>
+                    {% endif %}
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    </div>
+    {% else %}
+    <p style="color: #6b7280; text-align: center; padding: 2rem;">אין רשומות עדיין. העלה קובץ תלושים כדי להתחיל.</p>
+    {% endif %}
+</div>
+{% endblock %}

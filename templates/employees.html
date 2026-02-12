@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+{% block title %}PaySlip Agent - עובדים{% endblock %}
+
+{% block content %}
+<div class="card">
+    <h2 style="margin-bottom: 1rem;">מאגר עובדים</h2>
+    <p style="color: #6b7280; margin-bottom: 1.5rem; font-size: 0.9rem;">
+        נתוני העובדים נשמרים אוטומטית בכל עיבוד. כתובות אימייל מתמלאות אוטומטית בתלושים הבאים.
+    </p>
+
+    {% if employees %}
+    <table>
+        <thead>
+            <tr>
+                <th>שם</th>
+                <th>ת.ז</th>
+                <th>אימייל</th>
+                <th>נוצר</th>
+                <th>עודכן</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for emp in employees %}
+            <tr>
+                <td>{{ emp.name }}</td>
+                <td style="font-family: monospace;">{{ emp.employee_id }}</td>
+                <td>{{ emp.email or '---' }}</td>
+                <td style="font-size: 0.85rem; color: #6b7280;">{{ emp.created_at }}</td>
+                <td style="font-size: 0.85rem; color: #6b7280;">{{ emp.updated_at }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    {% else %}
+    <p style="color: #6b7280; text-align: center; padding: 2rem;">אין עובדים רשומים עדיין.</p>
+    {% endif %}
+</div>
+{% endblock %}
