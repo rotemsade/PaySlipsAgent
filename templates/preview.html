@@ -1,0 +1,143 @@
+{% extends "base.html" %}
+{% block title %}PaySlip Agent - בדיקת נתונים{% endblock %}
+
+{% block extra_head %}
+<style>
+    .payslip-row { transition: background 0.2s; }
+    .payslip-row:hover { background: #f9fafb; }
+    .payslip-row.invalid { background: #fef2f2; }
+    .page-badge {
+        display: inline-block;
+        background: #e5e7eb;
+        padding: 0.2rem 0.6rem;
+        border-radius: 9999px;
+        font-size: 0.8rem;
+        font-weight: 600;
+    }
+    .preview-filename {
+        font-size: 0.8rem;
+        color: #6b7280;
+        margin-top: 0.25rem;
+    }
+    .form-actions {
+        display: flex;
+        gap: 1rem;
+        justify-content: center;
+        margin-top: 1.5rem;
+    }
+    .summary {
+        display: flex;
+        gap: 2rem;
+        margin-bottom: 1.5rem;
+        flex-wrap: wrap;
+    }
+    .summary-item {
+        text-align: center;
+    }
+    .summary-item .num {
+        font-size: 2rem;
+        font-weight: 700;
+        color: #0f3460;
+    }
+    .summary-item .label {
+        font-size: 0.85rem;
+        color: #6b7280;
+    }
+    .input-sm {
+        padding: 0.35rem 0.5rem;
+        font-size: 0.85rem;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="card">
+    <div class="summary">
+        <div class="summary-item">
+            <div class="num">{{ payslips|length }}</div>
+            <div class="label">תלושים נמצאו</div>
+        </div>
+        <div class="summary-item">
+            <div class="num status-ok">{{ payslips|selectattr('is_valid')|list|length }}</div>
+            <div class="label">תקינים</div>
+        </div>
+        <div class="summary-item">
+            <div class="num status-err">{{ payslips|rejectattr('is_valid')|list|length }}</div>
+            <div class="label">דורשים תיקון</div>
+        </div>
+    </div>
+</div>
+
+<div class="card" style="overflow-x: auto;">
+    <h3 style="margin-bottom: 1rem;">בדוק ותקן את הנתונים לפני שליחה</h3>
+
+    <form action="{{ url_for('process') }}" method="post" id="processForm">
+        <input type="hidden" name="session_id" value="{{ session_id }}">
+
+        <table>
+            <thead>
+                <tr>
+                    <th>עמוד</th>
+                    <th>שם עובד/ת</th>
+                    <th>ת.ז</th>
+                    <th>אימייל</th>
+                    <th>חודש</th>
+                    <th>שנה</th>
+                    <th>שם קובץ</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for ps in payslips %}
+                <tr class="payslip-row {{ '' if ps.is_valid else 'invalid' }}">
+                    <td><span class="page-badge">{{ ps.page }}</span></td>
+                    <td>
+                        <input type="text" name="name_{{ loop.index0 }}" value="{{ ps.name }}"
+                               class="input-sm" placeholder="שם מלא" required>
+                    </td>
+                    <td>
+                        <input type="text" name="employee_id_{{ loop.index0 }}" value="{{ ps.employee_id }}"
+                               class="input-sm" placeholder="מספר ת.ז" required
+                               pattern="\d{5,9}" title="5-9 ספרות">
+                    </td>
+                    <td>
+                        <input type="email" name="email_{{ loop.index0 }}" value="{{ ps.email }}"
+                               class="input-sm" placeholder="email@example.com">
+                    </td>
+                    <td>
+                        <select name="month_{{ loop.index0 }}" class="input-sm">
+                            <option value="">--</option>
+                            {% for num, name in hebrew_months.items() %}
+                            <option value="{{ num }}" {{ 'selected' if ps.month == num }}>{{ name }}</option>
+                            {% endfor %}
+                        </select>
+                    </td>
+                    <td>
+                        <input type="number" name="year_{{ loop.index0 }}" value="{{ ps.year }}"
+                               class="input-sm" placeholder="שנה" min="1900" max="2100"
+                               style="width: 80px;">
+                    </td>
+                    <td>
+                        <div class="preview-filename" id="fn_{{ loop.index0 }}">{{ ps.filename }}.pdf</div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+
+        <div class="form-actions">
+            <a href="{{ url_for('index') }}" class="btn btn-secondary">חזרה</a>
+            <button type="submit" class="btn btn-success" id="processBtn">
+                הצפן ושלח תלושים
+            </button>
+        </div>
+    </form>
+</div>
+
+<script>
+    document.getElementById('processForm').addEventListener('submit', function() {
+        const btn = document.getElementById('processBtn');
+        btn.disabled = true;
+        btn.textContent = 'מעבד ושולח...';
+    });
+</script>
+{% endblock %}

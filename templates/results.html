@@ -1,0 +1,58 @@
+{% extends "base.html" %}
+{% block title %}PaySlip Agent - תוצאות{% endblock %}
+
+{% block content %}
+<div class="card">
+    <h2 style="margin-bottom: 1.5rem; text-align: center;">תוצאות שליחה</h2>
+
+    <div style="display: flex; gap: 2rem; justify-content: center; margin-bottom: 2rem; flex-wrap: wrap;">
+        <div style="text-align: center;">
+            <div style="font-size: 2.5rem; font-weight: 700; color: #059669;">
+                {{ results|selectattr('success')|list|length }}
+            </div>
+            <div style="color: #6b7280;">נשלחו בהצלחה</div>
+        </div>
+        <div style="text-align: center;">
+            <div style="font-size: 2.5rem; font-weight: 700; color: #dc2626;">
+                {{ results|rejectattr('success')|list|length }}
+            </div>
+            <div style="color: #6b7280;">נכשלו</div>
+        </div>
+    </div>
+
+    <table>
+        <thead>
+            <tr>
+                <th>שם עובד/ת</th>
+                <th>אימייל</th>
+                <th>קובץ</th>
+                <th>סטטוס</th>
+                <th>פרטים</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for r in results %}
+            <tr>
+                <td>{{ r.employee_name }}</td>
+                <td>{{ r.email or '---' }}</td>
+                <td style="font-size: 0.85rem;">{{ r.filename }}</td>
+                <td>
+                    {% if r.success %}
+                    <span class="status-ok">נשלח</span>
+                    {% else %}
+                    <span class="status-err">נכשל</span>
+                    {% endif %}
+                </td>
+                <td style="font-size: 0.85rem; color: #6b7280;">
+                    {{ r.error or '' }}
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+
+    <div style="text-align: center; margin-top: 2rem;">
+        <a href="{{ url_for('index') }}" class="btn btn-primary">שלח תלושים נוספים</a>
+    </div>
+</div>
+{% endblock %}
