@@ -116,6 +116,26 @@ def get_employee_by_tz(employee_id: str) -> dict | None:
     return dict(row) if row else None
 
 
+def get_employee_by_name(name: str) -> dict | None:
+    """Look up an employee by their full name (exact match)."""
+    conn = get_db()
+    row = conn.execute(
+        "SELECT * FROM employees WHERE name = ?", (name,)
+    ).fetchone()
+    conn.close()
+    return dict(row) if row else None
+
+
+def get_employee_by_email(email: str) -> dict | None:
+    """Look up an employee by their email address."""
+    conn = get_db()
+    row = conn.execute(
+        "SELECT * FROM employees WHERE email = ?", (email,)
+    ).fetchone()
+    conn.close()
+    return dict(row) if row else None
+
+
 def get_all_employees() -> list[dict]:
     conn = get_db()
     rows = conn.execute("SELECT * FROM employees ORDER BY name").fetchall()

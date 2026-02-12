@@ -81,23 +81,112 @@
         padding: 0.4rem 0.6rem !important;
         font-size: 0.85rem !important;
     }
-    /* Lightbox */
+    .autofill-hint {
+        font-size: 0.7rem;
+        color: #059669;
+        font-weight: 600;
+        display: none;
+        margin-top: 0.15rem;
+    }
+    .autofill-hint.visible { display: block; }
+
+    /* Lightbox with zoom */
     .lightbox {
         display: none;
         position: fixed;
         inset: 0;
-        background: rgba(0,0,0,0.8);
+        background: rgba(0,0,0,0.85);
         z-index: 1000;
-        justify-content: center;
+        flex-direction: column;
         align-items: center;
-        cursor: pointer;
+        justify-content: center;
     }
     .lightbox.active { display: flex; }
-    .lightbox img {
-        max-width: 90vw;
+    .lightbox-controls {
+        position: absolute;
+        top: 1rem;
+        left: 50%;
+        transform: translateX(-50%);
+        display: flex;
+        gap: 0.5rem;
+        z-index: 1001;
+    }
+    .lightbox-btn {
+        width: 40px;
+        height: 40px;
+        border-radius: 50%;
+        border: none;
+        background: rgba(255,255,255,0.2);
+        color: white;
+        font-size: 1.3rem;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        transition: background 0.2s;
+        font-weight: 700;
+        line-height: 1;
+    }
+    .lightbox-btn:hover { background: rgba(255,255,255,0.4); }
+    .lightbox-zoom-level {
+        color: rgba(255,255,255,0.7);
+        font-size: 0.85rem;
+        align-self: center;
+        min-width: 45px;
+        text-align: center;
+    }
+    .lightbox-img-wrapper {
+        overflow: auto;
+        max-width: 95vw;
         max-height: 90vh;
+        cursor: grab;
+        border-radius: 8px;
+    }
+    .lightbox-img-wrapper:active { cursor: grabbing; }
+    .lightbox-img-wrapper img {
+        display: block;
+        transform-origin: center center;
+        transition: transform 0.15s ease;
         border-radius: 8px;
         box-shadow: 0 4px 30px rgba(0,0,0,0.3);
+    }
+
+    /* Confirmation modal */
+    .modal-overlay {
+        display: none;
+        position: fixed;
+        inset: 0;
+        background: rgba(0,0,0,0.5);
+        z-index: 2000;
+        align-items: center;
+        justify-content: center;
+    }
+    .modal-overlay.active { display: flex; }
+    .modal-box {
+        background: white;
+        border-radius: 12px;
+        padding: 2rem;
+        max-width: 450px;
+        width: 90%;
+        direction: rtl;
+        box-shadow: 0 10px 40px rgba(0,0,0,0.2);
+    }
+    .modal-box h3 { margin-bottom: 1rem; font-size: 1.1rem; }
+    .modal-box p { margin-bottom: 0.5rem; font-size: 0.9rem; color: #374151; }
+    .modal-box .field-change {
+        background: #f0fdf4;
+        border: 1px solid #bbf7d0;
+        border-radius: 6px;
+        padding: 0.5rem 0.75rem;
+        margin: 0.75rem 0;
+        font-size: 0.85rem;
+    }
+    .modal-box .field-change strong { color: #059669; }
+    .modal-actions {
+        display: flex;
+        gap: 0.75rem;
+        justify-content: flex-start;
+        margin-top: 1.5rem;
     }
 </style>
 {% endblock %}
@@ -130,7 +219,7 @@
         <input type="hidden" name="session_id" value="{{ session_id }}">
 
         {% for ps in payslips %}
-        <div class="payslip-card {{ '' if ps.is_valid else 'invalid' }} {{ 'already-sent' if ps.already_sent }}">
+        <div class="payslip-card {{ '' if ps.is_valid else 'invalid' }} {{ 'already-sent' if ps.already_sent }}" data-idx="{{ loop.index0 }}">
             <div class="preview-thumb" onclick="openLightbox('{{ url_for('page_preview', session_id=session_id, page_number=ps.page - 1) }}')">
                 <img src="{{ url_for('page_preview', session_id=session_id, page_number=ps.page - 1) }}"
                      alt="תלוש עמוד {{ ps.page }}" loading="lazy">
@@ -150,20 +239,26 @@
                 <div class="field-group">
                     <label>שם עובד/ת</label>
                     <input type="text" name="name_{{ loop.index0 }}" value="{{ ps.name }}"
-                           class="input-sm" placeholder="שם מלא" required>
+                           class="input-sm lookup-field" data-field="name" data-idx="{{ loop.index0 }}"
+                           placeholder="שם מלא" required>
+                    <div class="autofill-hint" id="hint_name_{{ loop.index0 }}"></div>
                 </div>
 
                 <div class="field-group">
                     <label>ת.ז</label>
                     <input type="text" name="employee_id_{{ loop.index0 }}" value="{{ ps.employee_id }}"
-                           class="input-sm" placeholder="מספר ת.ז" required
+                           class="input-sm lookup-field" data-field="employee_id" data-idx="{{ loop.index0 }}"
+                           placeholder="מספר ת.ז" required
                            pattern="\d{5,9}" title="5-9 ספרות">
+                    <div class="autofill-hint" id="hint_id_{{ loop.index0 }}"></div>
                 </div>
 
                 <div class="field-group">
                     <label>אימייל</label>
                     <input type="email" name="email_{{ loop.index0 }}" value="{{ ps.email }}"
-                           class="input-sm" placeholder="email@example.com">
+                           class="input-sm lookup-field" data-field="email" data-idx="{{ loop.index0 }}"
+                           placeholder="email@example.com">
+                    <div class="autofill-hint" id="hint_email_{{ loop.index0 }}"></div>
                 </div>
 
                 <div class="field-group" style="display: flex; flex-direction: row; gap: 0.5rem; align-items: end;">
@@ -203,19 +298,42 @@
     </form>
 </div>
 
-<!-- Lightbox for full-size preview -->
-<div class="lightbox" id="lightbox" onclick="closeLightbox()">
-    <img id="lightboxImg" src="" alt="תצוגה מקדימה">
+<!-- Zoomable Lightbox -->
+<div class="lightbox" id="lightbox">
+    <div class="lightbox-controls">
+        <button class="lightbox-btn" onclick="zoomIn()" title="הגדל">+</button>
+        <div class="lightbox-zoom-level" id="zoomLevel">100%</div>
+        <button class="lightbox-btn" onclick="zoomOut()" title="הקטן">−</button>
+        <button class="lightbox-btn" onclick="zoomReset()" title="אפס">⊡</button>
+        <button class="lightbox-btn" onclick="closeLightbox()" title="סגור">✕</button>
+    </div>
+    <div class="lightbox-img-wrapper" id="imgWrapper">
+        <img id="lightboxImg" src="" alt="תצוגה מקדימה">
+    </div>
+</div>
+
+<!-- Confirmation Modal -->
+<div class="modal-overlay" id="confirmModal">
+    <div class="modal-box">
+        <h3>נמצא עובד/ת במאגר</h3>
+        <p>האם למלא את השדות מהנתונים השמורים?</p>
+        <div class="field-change" id="modalDetails"></div>
+        <div class="modal-actions">
+            <button class="btn btn-success btn-sm" id="modalConfirm">כן, מלא אוטומטית</button>
+            <button class="btn btn-secondary btn-sm" id="modalDeny">לא, השאר כמו שזה</button>
+        </div>
+    </div>
 </div>
 
 <script>
-    // Hebrew month names for filename generation
+    // ===== Hebrew month names =====
     const HEBREW_MONTHS = {
         1: 'ינואר', 2: 'פברואר', 3: 'מרץ', 4: 'אפריל',
         5: 'מאי', 6: 'יוני', 7: 'יולי', 8: 'אוגוסט',
         9: 'ספטמבר', 10: 'אוקטובר', 11: 'נובמבר', 12: 'דצמבר'
     };
 
+    // ===== Live filename update =====
     function updateFilename(idx) {
         const name = document.querySelector(`[name="name_${idx}"]`).value.trim();
         const monthVal = document.querySelector(`[name="month_${idx}"]`).value;
@@ -235,7 +353,6 @@
         fnEl.textContent = filename + '.pdf';
     }
 
-    // Attach live update listeners to all payslip fields
     const totalPayslips = {{ payslips|length }};
     for (let i = 0; i < totalPayslips; i++) {
         ['name', 'month', 'year'].forEach(field => {
@@ -247,20 +364,145 @@
         });
     }
 
-    // Lightbox
-    function openLightbox(src) {
-        const lb = document.getElementById('lightbox');
-        document.getElementById('lightboxImg').src = src;
-        lb.classList.add('active');
+    // ===== Auto-fill from DB with confirmation =====
+    let lookupTimeout = {};
+    let pendingAutofill = null; // {idx, data, changedField}
+
+    function showConfirmModal(idx, dbData, changedField) {
+        const nameEl = document.querySelector(`[name="name_${idx}"]`);
+        const idEl = document.querySelector(`[name="employee_id_${idx}"]`);
+        const emailEl = document.querySelector(`[name="email_${idx}"]`);
+
+        // Build description of what will be filled
+        let changes = [];
+        if (changedField !== 'name' && dbData.name && nameEl.value.trim() !== dbData.name) {
+            changes.push(`<strong>שם:</strong> ${dbData.name}`);
+        }
+        if (changedField !== 'employee_id' && dbData.employee_id && idEl.value.trim() !== dbData.employee_id) {
+            changes.push(`<strong>ת.ז:</strong> ${dbData.employee_id}`);
+        }
+        if (changedField !== 'email' && dbData.email && emailEl.value.trim() !== dbData.email) {
+            changes.push(`<strong>אימייל:</strong> ${dbData.email}`);
+        }
+
+        if (changes.length === 0) return; // Nothing new to fill
+
+        pendingAutofill = { idx, data: dbData, changedField };
+        document.getElementById('modalDetails').innerHTML = changes.join('<br>');
+        document.getElementById('confirmModal').classList.add('active');
     }
+
+    document.getElementById('modalConfirm').addEventListener('click', () => {
+        if (pendingAutofill) {
+            const { idx, data, changedField } = pendingAutofill;
+            const nameEl = document.querySelector(`[name="name_${idx}"]`);
+            const idEl = document.querySelector(`[name="employee_id_${idx}"]`);
+            const emailEl = document.querySelector(`[name="email_${idx}"]`);
+
+            if (changedField !== 'name' && data.name) nameEl.value = data.name;
+            if (changedField !== 'employee_id' && data.employee_id) idEl.value = data.employee_id;
+            if (changedField !== 'email' && data.email) emailEl.value = data.email;
+
+            updateFilename(idx);
+        }
+        pendingAutofill = null;
+        document.getElementById('confirmModal').classList.remove('active');
+    });
+
+    document.getElementById('modalDeny').addEventListener('click', () => {
+        pendingAutofill = null;
+        document.getElementById('confirmModal').classList.remove('active');
+    });
+
+    // Debounced lookup on field change
+    document.querySelectorAll('.lookup-field').forEach(input => {
+        input.addEventListener('change', function() {
+            const field = this.dataset.field;
+            const idx = parseInt(this.dataset.idx);
+            const value = this.value.trim();
+
+            if (!value) return;
+
+            // Debounce
+            clearTimeout(lookupTimeout[`${field}_${idx}`]);
+            lookupTimeout[`${field}_${idx}`] = setTimeout(() => {
+                fetch('/api/employee_lookup', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ field, value })
+                })
+                .then(r => r.json())
+                .then(data => {
+                    if (data.found) {
+                        showConfirmModal(idx, data, field);
+                    }
+                })
+                .catch(() => {}); // Silently ignore lookup failures
+            }, 300);
+        });
+    });
+
+    // ===== Zoomable Lightbox =====
+    let currentZoom = 1;
+    const ZOOM_STEP = 0.25;
+    const ZOOM_MIN = 0.5;
+    const ZOOM_MAX = 4;
+
+    function openLightbox(src) {
+        currentZoom = 1;
+        updateZoom();
+        document.getElementById('lightboxImg').src = src;
+        document.getElementById('lightbox').classList.add('active');
+    }
+
     function closeLightbox() {
         document.getElementById('lightbox').classList.remove('active');
     }
-    document.addEventListener('keydown', (e) => {
-        if (e.key === 'Escape') closeLightbox();
+
+    function zoomIn() {
+        currentZoom = Math.min(ZOOM_MAX, currentZoom + ZOOM_STEP);
+        updateZoom();
+    }
+
+    function zoomOut() {
+        currentZoom = Math.max(ZOOM_MIN, currentZoom - ZOOM_STEP);
+        updateZoom();
+    }
+
+    function zoomReset() {
+        currentZoom = 1;
+        updateZoom();
+    }
+
+    function updateZoom() {
+        const img = document.getElementById('lightboxImg');
+        img.style.transform = `scale(${currentZoom})`;
+        document.getElementById('zoomLevel').textContent = `${Math.round(currentZoom * 100)}%`;
+    }
+
+    // Scroll wheel zoom
+    document.getElementById('imgWrapper').addEventListener('wheel', (e) => {
+        e.preventDefault();
+        if (e.deltaY < 0) zoomIn();
+        else zoomOut();
     });
 
-    // Submit lock
+    // Click on backdrop (not image) to close
+    document.getElementById('lightbox').addEventListener('click', (e) => {
+        if (e.target === document.getElementById('lightbox')) closeLightbox();
+    });
+
+    // Keyboard: Escape to close, +/- to zoom
+    document.addEventListener('keydown', (e) => {
+        const lb = document.getElementById('lightbox');
+        if (!lb.classList.contains('active')) return;
+        if (e.key === 'Escape') closeLightbox();
+        else if (e.key === '+' || e.key === '=') zoomIn();
+        else if (e.key === '-') zoomOut();
+        else if (e.key === '0') zoomReset();
+    });
+
+    // ===== Submit lock =====
     document.getElementById('processForm').addEventListener('submit', function() {
         const btn = document.getElementById('processBtn');
         btn.disabled = true;

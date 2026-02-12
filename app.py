@@ -364,6 +364,41 @@ def retry_email(record_id: int):
     return redirect(url_for("history"))
 
 
+# ---------- AJAX API for preview page ----------
+
+
+@app.route("/api/employee_lookup", methods=["POST"])
+def employee_lookup():
+    """
+    Look up stored employee data by one field (name, employee_id, or email).
+    Returns the full employee record if found, so the UI can auto-fill other fields.
+    """
+    data = request.get_json(silent=True) or {}
+    field = data.get("field")  # "name", "employee_id", or "email"
+    value = (data.get("value") or "").strip()
+
+    if not field or not value:
+        return jsonify({"found": False})
+
+    emp = None
+    if field == "employee_id":
+        emp = db.get_employee_by_tz(value)
+    elif field == "name":
+        emp = db.get_employee_by_name(value)
+    elif field == "email":
+        emp = db.get_employee_by_email(value)
+
+    if emp:
+        return jsonify({
+            "found": True,
+            "name": emp.get("name", ""),
+            "employee_id": emp.get("employee_id", ""),
+            "email": emp.get("email", ""),
+        })
+
+    return jsonify({"found": False})
+
+
 # ---------- REST API ----------
 
 
