@@ -184,8 +184,9 @@
                 </div>
 
                 <div class="field-group full-width">
-                    <label>שם קובץ (אוטומטי)</label>
-                    <div style="font-size: 0.85rem; color: #6b7280; padding: 0.3rem 0;">
+                    <label>שם קובץ (מתעדכן אוטומטית)</label>
+                    <div class="filename-preview" id="fn_{{ loop.index0 }}"
+                         style="font-size: 0.85rem; color: #0f3460; font-weight: 600; padding: 0.3rem 0; direction: rtl;">
                         {{ ps.filename }}.pdf
                     </div>
                 </div>
@@ -208,11 +209,48 @@
 </div>
 
 <script>
+    // Hebrew month names for filename generation
+    const HEBREW_MONTHS = {
+        1: 'ינואר', 2: 'פברואר', 3: 'מרץ', 4: 'אפריל',
+        5: 'מאי', 6: 'יוני', 7: 'יולי', 8: 'אוגוסט',
+        9: 'ספטמבר', 10: 'אוקטובר', 11: 'נובמבר', 12: 'דצמבר'
+    };
+
+    function updateFilename(idx) {
+        const name = document.querySelector(`[name="name_${idx}"]`).value.trim();
+        const monthVal = document.querySelector(`[name="month_${idx}"]`).value;
+        const yearVal = document.querySelector(`[name="year_${idx}"]`).value.trim();
+        const fnEl = document.getElementById(`fn_${idx}`);
+
+        let displayName = name || `employee_page_${idx + 1}`;
+        let filename = displayName;
+
+        if (monthVal && yearVal) {
+            const hebrewMonth = HEBREW_MONTHS[parseInt(monthVal)] || monthVal;
+            filename = `${displayName} - ${hebrewMonth} ${yearVal}`;
+        } else if (yearVal) {
+            filename = `${displayName} - ${yearVal}`;
+        }
+
+        fnEl.textContent = filename + '.pdf';
+    }
+
+    // Attach live update listeners to all payslip fields
+    const totalPayslips = {{ payslips|length }};
+    for (let i = 0; i < totalPayslips; i++) {
+        ['name', 'month', 'year'].forEach(field => {
+            const el = document.querySelector(`[name="${field}_${i}"]`);
+            if (el) {
+                el.addEventListener('input', () => updateFilename(i));
+                el.addEventListener('change', () => updateFilename(i));
+            }
+        });
+    }
+
+    // Lightbox
     function openLightbox(src) {
         const lb = document.getElementById('lightbox');
-        const img = document.getElementById('lightboxImg');
-        // Load full-resolution version (wider)
-        img.src = src.replace('max_width=400', '');
+        document.getElementById('lightboxImg').src = src;
         lb.classList.add('active');
     }
     function closeLightbox() {
@@ -222,6 +260,7 @@
         if (e.key === 'Escape') closeLightbox();
     });
 
+    // Submit lock
     document.getElementById('processForm').addEventListener('submit', function() {
         const btn = document.getElementById('processBtn');
         btn.disabled = true;

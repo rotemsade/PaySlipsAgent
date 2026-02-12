@@ -1,16 +1,18 @@
 """
 Extracts employee data from payslip PDF pages using Claude Vision API.
 
-Sends each page as an image to Claude, which reads the Hebrew payslip and returns
-structured JSON with: name, employee_id, email, month, year.
+Sends each page as a high-resolution image to Claude, which reads the Hebrew
+payslip and returns structured JSON with: name, employee_id, email, month, year.
 
-Falls back to regex-based extraction if the API key is not configured.
+Also handles preview image generation — previews are generated once during upload
+and cached to disk to avoid concurrent pdfplumber access (which causes heap corruption).
 """
 
 import base64
 import io
 import json
 import logging
+import os
 
 import anthropic
 import pdfplumber
@@ -21,30 +23,46 @@ from config import Config
 logger = logging.getLogger(__name__)
 
 EXTRACTION_PROMPT = """\
-You are analyzing a Hebrew payslip (תלוש שכר). Extract the following fields from this payslip image.
+You are an expert at reading Israeli payslips (תלושי שכר) in Hebrew.
 
-Return ONLY a JSON object with these keys (no markdown, no explanation):
+Carefully examine this payslip image and extract the following employee details.
+
+Return ONLY a valid JSON object (no markdown fences, no explanation):
 {
-  "name": "Employee full name in Hebrew (שם פרטי + שם משפחה)",
-  "employee_id": "Teudat Zehut number (ת.ז) — digits only, 5-9 digits",
-  "email": "Employee email address if visible, otherwise null",
-  "month": "Pay period month as integer 1-12",
-  "year": "Pay period year as 4-digit integer"
+  "name": "שם פרטי ושם משפחה של העובד/ת",
+  "employee_id": "מספר תעודת זהות — ספרות בלבד",
+  "email": "כתובת דוא\"ל אם מופיעה, אחרת null",
+  "month": "חודש השכר כמספר 1-12",
+  "year": "שנת השכר כמספר בן 4 ספרות"
 }
 
-Rules:
-- For name: look for שם עובד, שם מלא, or the employee name field. Return the full name in Hebrew.
-- For employee_id: look for ת.ז, תעודת זהות, מספר זהות. Return digits only.
-- For email: look for דוא"ל, אימייל, דואר אלקטרוני, or any email pattern. Return null if not found.
-- For month/year: look for חודש שכר, תקופה, or date fields indicating the pay period.
-- Return null for any field you cannot find.
-- Return ONLY the JSON object, nothing else.
+Detailed instructions:
+1. NAME (שם עובד/ת): Look for fields labeled שם עובד, שם משפחה, שם פרטי, שם מלא, or לכבוד.
+   - The name typically appears near the top of the payslip.
+   - Return FIRST NAME then LAST NAME (שם פרטי + שם משפחה), in Hebrew.
+   - Be precise — read each letter carefully. Hebrew letters that look similar:
+     ב/כ, ג/נ, ד/ר, ה/ח/ת, ו/ז, ט/מ, ע/צ, פ/ף, כ/ך, מ/ם, נ/ן, פ/ף, צ/ץ
+   - If first name and last name are in separate fields, combine them.
+
+2. EMPLOYEE ID (ת.ז): Look for ת.ז, ת"ז, תעודת זהות, מספר זהות, מס' זהות.
+   - This is a 5-9 digit Israeli ID number.
+   - Return digits only, no dashes or spaces.
+
+3. EMAIL: Look for דוא"ל, אימייל, דואר אלקטרוני, מייל, email, or an @ symbol.
+   - Return null if no email is visible on the payslip.
+
+4. MONTH & YEAR: Look for חודש, חודש שכר, תקופה, תקופת שכר, לחודש.
+   - Common formats: "01/2024", "ינואר 2024", "חודש 1 שנת 2024"
+   - Return month as integer (1=January/ינואר, 12=December/דצמבר).
+   - Return year as 4-digit integer.
+
+Return null for any field you truly cannot find. Be accurate — do not guess.
 """
 
 
-def _page_to_image_bytes(page) -> bytes:
-    """Convert a pdfplumber page to a PNG image bytes."""
-    img = page.to_image(resolution=200)
+def _page_to_image_bytes(page, resolution: int = 300) -> bytes:
+    """Convert a pdfplumber page to PNG image bytes at the given resolution."""
+    img = page.to_image(resolution=resolution)
     buf = io.BytesIO()
     img.original.save(buf, format="PNG")
     return buf.getvalue()
@@ -64,8 +82,8 @@ def extract_with_vision(pdf_path: str) -> list[dict]:
         for page_num, page in enumerate(pdf.pages):
             raw_text = page.extract_text() or ""
 
-            # Convert page to image for vision API
-            image_bytes = _page_to_image_bytes(page)
+            # Convert page to high-res image for vision API
+            image_bytes = _page_to_image_bytes(page, resolution=300)
             image_b64 = base64.standard_b64encode(image_bytes).decode("utf-8")
 
             try:
@@ -132,31 +150,37 @@ def extract_with_vision(pdf_path: str) -> list[dict]:
     return results
 
 
-def generate_page_preview(pdf_path: str, page_number: int, max_width: int = 400) -> bytes:
+def generate_all_previews(pdf_path: str, output_dir: str, max_width: int = 400) -> int:
     """
-    Generate a PNG preview image of a specific PDF page.
+    Pre-generate PNG preview thumbnails for ALL pages in the PDF.
+    Saves them as 0.png, 1.png, etc. in output_dir.
 
-    Args:
-        pdf_path: Path to the PDF file.
-        page_number: 0-based page index.
-        max_width: Maximum width in pixels for the thumbnail.
+    This is called ONCE during upload to avoid concurrent pdfplumber access.
 
-    Returns:
-        PNG image bytes.
+    Returns the number of pages processed.
     """
+    os.makedirs(output_dir, exist_ok=True)
+
     with pdfplumber.open(pdf_path) as pdf:
-        if page_number >= len(pdf.pages):
-            raise ValueError(f"Page {page_number} does not exist")
+        for page_num, page in enumerate(pdf.pages):
+            img = page.to_image(resolution=150)
+            pil_img = img.original
 
-        page = pdf.pages[page_number]
-        img = page.to_image(resolution=150)
-        pil_img = img.original
+            # Resize to thumbnail
+            ratio = max_width / pil_img.width
+            new_size = (max_width, int(pil_img.height * ratio))
+            pil_img = pil_img.resize(new_size, Image.LANCZOS)
 
-        # Resize to thumbnail
-        ratio = max_width / pil_img.width
-        new_size = (max_width, int(pil_img.height * ratio))
-        pil_img = pil_img.resize(new_size, Image.LANCZOS)
+            out_path = os.path.join(output_dir, f"{page_num}.png")
+            pil_img.save(out_path, format="PNG")
 
-        buf = io.BytesIO()
-        pil_img.save(buf, format="PNG")
-        return buf.getvalue()
+        return len(pdf.pages)
+
+
+def get_cached_preview(preview_dir: str, page_number: int) -> bytes | None:
+    """Read a cached preview PNG from disk. Returns None if not found."""
+    path = os.path.join(preview_dir, f"{page_number}.png")
+    if os.path.exists(path):
+        with open(path, "rb") as f:
+            return f.read()
+    return None

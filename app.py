@@ -34,7 +34,7 @@ from config import Config
 from payslip_parser import HEBREW_MONTHS, EmployeePayslip, parse_payslips
 from pdf_processor import split_and_encrypt
 from email_sender import send_all_payslips
-from vision_extractor import extract_with_vision, generate_page_preview
+from vision_extractor import extract_with_vision, generate_all_previews, get_cached_preview
 import database as db
 
 logging.basicConfig(level=logging.INFO)
@@ -133,11 +133,19 @@ def upload():
         shutil.rmtree(session_dir, ignore_errors=True)
         return redirect(url_for("index"))
 
+    # Pre-generate all preview thumbnails (once, to avoid concurrent pdfplumber access)
+    preview_dir = os.path.join(session_dir, "previews")
+    try:
+        generate_all_previews(pdf_path, preview_dir)
+    except Exception as e:
+        logger.warning(f"Preview generation failed: {e}")
+
     # Store session data
     _sessions[session_id] = {
         "pdf_path": pdf_path,
         "original_filename": file.filename,
         "session_dir": session_dir,
+        "preview_dir": preview_dir,
         "payslips": payslips,
     }
 
@@ -189,19 +197,17 @@ def preview(session_id: str):
 
 @app.route("/page_preview/<session_id>/<int:page_number>")
 def page_preview(session_id: str, page_number: int):
-    """Serve a PNG preview image of a specific payslip page."""
+    """Serve a cached PNG preview image of a specific payslip page."""
     sess = _sessions.get(session_id)
     if not sess:
         return "Session not found", 404
 
-    try:
-        image_bytes = generate_page_preview(
-            sess["pdf_path"], page_number, max_width=400
-        )
+    preview_dir = sess.get("preview_dir", "")
+    image_bytes = get_cached_preview(preview_dir, page_number)
+    if image_bytes:
         return Response(image_bytes, mimetype="image/png")
-    except Exception as e:
-        logger.error(f"Preview error: {e}")
-        return "Preview unavailable", 500
+
+    return "Preview unavailable", 500
 
 
 @app.route("/process", methods=["POST"])
